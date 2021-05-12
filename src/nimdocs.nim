@@ -85,4 +85,4 @@ proc cb(req: Request) {.async.} =
 
 
 when isMainModule:
-  waitFor server.serve(Port(8080), cb)
+  waitFor server.serve(Port(80), cb)
