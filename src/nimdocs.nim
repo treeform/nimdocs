@@ -57,7 +57,7 @@ proc cb(req: Request) {.async.} =
       if res[1] != 0:
         await showLog()
         return
-      if res[0] notin ["Already up-to-date.\n", "Already up to date.\n"]:
+      if "changed" in res[0]:
         needsDocs = true
     else:
       output.add "Rate limiting git pull"
