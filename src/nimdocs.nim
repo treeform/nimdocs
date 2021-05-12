@@ -42,6 +42,7 @@ proc cb(req: Request) {.async.} =
       let gitUpdate = &"git pull"
       print gitUpdate
       let output = execCmdEx(gitUpdate, workingDir = "repos" / author / repo)
+      print output
       if output[0] != "Already up-to-date.\n":
         genDocs()
 
