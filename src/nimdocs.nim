@@ -23,7 +23,10 @@ proc cb(req: Request) {.async.} =
 
   # Handle static files.
   if req.url.path == "/":
-    await req.respond(Http200, "TODO: index", newHttpHeaders())
+    let html = &"""<meta http-equiv="refresh" content="0; url=/treeform/nimdocs/nimdocs.html" />"""
+    await req.respond(Http200, html, newHttpHeaders({
+      "Content-Type": "text/html"
+    }))
     return
   if req.url.path == "/favicon.ico":
     await req.respond(Http200, "TODO: icon", newHttpHeaders())
