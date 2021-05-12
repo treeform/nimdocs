@@ -43,7 +43,7 @@ proc cb(req: Request) {.async.} =
       print gitUpdate
       let output = execCmdEx(gitUpdate, workingDir = "repos" / author / repo)
       print output
-      if output[0] != "Already up-to-date.\n":
+      if output[0] in ["Already up-to-date.\n", "Already up to date.\n"]:
         genDocs()
 
     else:
