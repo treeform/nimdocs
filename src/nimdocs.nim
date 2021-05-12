@@ -35,6 +35,15 @@ proc cb(req: Request) {.async.} =
   # Handle github urls.
   let
     parts = req.url.path.strip(chars = {'/'}).split('/')
+
+  if parts.len < 2:
+    await req.respond(
+      Http404,
+      "<h1>404: not found. /user/repo Required.</h1>",
+      newHttpHeaders())
+    return
+
+  let
     author = parts[0]
     repo = parts[1]
     gitUrl = &"https://github.com/{author}/{repo}"
