@@ -1,4 +1,5 @@
-import times, osproc, mimetypes, asynchttpserver, asyncdispatch, print, strutils, strformat, os, strtabs
+import asyncdispatch, asynchttpserver, mimetypes, os, osproc, print, strformat,
+    strtabs, strutils, times
 
 var
   gitPullTime: float64
@@ -19,16 +20,20 @@ proc cb(req: Request) {.async.} =
 
   # Handle github urls.
   let
-    parts = req.url.path.strip(chars={'/'}).split('/')
+    parts = req.url.path.strip(chars = {'/'}).split('/')
     author = parts[0]
     repo = parts[1]
     gitUrl = &"https://github.com/{author}/{repo}"
 
   # Only allow registered authors.
   if author notin @["treeform", "guzba", "nim-lang"]:
-    await req.respond(Http404, &"<h1>404: https://github.com/{author}/* not allowed</h1>", newHttpHeaders({
-      "Content-Type": "text/html"
-    }))
+    await req.respond(
+      Http404,
+      &"<h1>404: https://github.com/{author}/* not allowed</h1>",
+      newHttpHeaders({
+        "Content-Type": "text/html"
+      })
+    )
     return
 
   var needsDocs = false
@@ -41,7 +46,7 @@ proc cb(req: Request) {.async.} =
 
   discard existsOrCreateDir("repos" / author)
 
-  if existsDir("repos" / author / repo):
+  if dirExists("repos" / author / repo):
     if gitPullTime + gitPullRateLimit < epochTime():
       gitPullTime = epochTime()
       let gitUpdate = &"git pull"
@@ -62,7 +67,12 @@ proc cb(req: Request) {.async.} =
       gitCloneTime = epochTime()
       let gitClone = &"git clone {gitUrl} repos/{author}/{repo}"
       print gitClone
-      let res = execCmdEx(gitClone, env = {"GIT_TERMINAL_PROMPT": "0"}.newStringTable)
+      let res = execCmdEx(
+        gitClone,
+        env = {
+          "GIT_TERMINAL_PROMPT": "0"
+        }.newStringTable
+      )
       output.add res[0]
       if res[1] != 0:
         await showLog()
@@ -71,7 +81,7 @@ proc cb(req: Request) {.async.} =
     else:
       output.add "Rate limiting git clone"
 
-  if not existsDir("repos" / author / repo):
+  if not dirExists("repos" / author / repo):
     await showLog()
     return
 
@@ -111,7 +121,7 @@ proc cb(req: Request) {.async.} =
 
   var m = newMimetypes()
 
-  if existsFile(filePath):
+  if fileExists(filePath):
     let data = readFile(filePath)
     await req.respond(Http200, data, newHttpHeaders({
       "Content-Type": m.getMimetype(filePath.splitFile.ext)
@@ -120,7 +130,6 @@ proc cb(req: Request) {.async.} =
     await req.respond(Http404, "<h1>404: not found</h1>", newHttpHeaders({
       "Content-Type": "text/html"
     }))
-
 
 when isMainModule:
   waitFor server.serve(Port(80), cb)
