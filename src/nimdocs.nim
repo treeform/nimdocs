@@ -17,6 +17,7 @@ var
   gitPullRateLimit = 60.0 # seconds
   gitCloneTime: float64
   gitCloneRateLimit = 5.0 # seconds
+  allowedAuthorsList = @["treeform", "guzba", "nim-lang"]
 
 var server = newAsyncHttpServer()
 proc cb(req: Request) {.async.} =
@@ -49,7 +50,7 @@ proc cb(req: Request) {.async.} =
     gitUrl = &"https://github.com/{author}/{repo}"
 
   # Only allow registered authors.
-  if author notin @["treeform", "guzba", "nim-lang"]:
+  if author notin allowedAuthorsList:
     await req.respond(
       Http404,
       &"<h1>404: https://github.com/{author}/* not allowed</h1>",
