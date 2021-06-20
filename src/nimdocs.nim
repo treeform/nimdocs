@@ -13,12 +13,16 @@
 import asyncdispatch, asynchttpserver, mimetypes, os, osproc, print, strformat,
     strtabs, strutils, times
 
+
+
+
 var
   gitPullTime: float64
   gitPullRateLimit = 60.0 # seconds
   gitCloneTime: float64
   gitCloneRateLimit = 5.0 # seconds
-  allowedAuthorsList = @["treeform", "guzba", "nim-lang", "beef331"]
+const
+  allowedAuthorsList = @["treeform", "guzba", "nim-lang"]
 
 var server = newAsyncHttpServer()
 proc cb(req: Request) {.async.} =
