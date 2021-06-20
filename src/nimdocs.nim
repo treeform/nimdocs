@@ -13,9 +13,6 @@
 import asyncdispatch, asynchttpserver, mimetypes, os, osproc, print, strformat,
     strtabs, strutils, times
 
-
-
-
 var
   gitPullTime: float64
   gitPullRateLimit = 60.0 # seconds
