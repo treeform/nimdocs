@@ -1,3 +1,5 @@
+## .. image:: https://github.com/treeform/nimdocs/blob/master/docs/nimdocsBanner.png
+##
 ## # Nim docs - generate a doc for any github nim project.
 ##
 ## I got tried of building nim docs for all of my many projects. I create this site that auto generates the docs for me based on the url. Going to https://nimdocs.com/treeform/pixie will just clone the https://github.com/treeform/pixie and generate the docs with index for all files.
