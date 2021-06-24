@@ -1,4 +1,4 @@
-## .. image:: https://github.com/treeform/nimdocs/blob/master/docs/nimdocsBanner.png
+## .. image:: https://raw.githubusercontent.com/treeform/nimdocs/master/docs/nimdocsBanner.png
 ##
 ## # Nim docs - generate a doc for any github nim project.
 ##
