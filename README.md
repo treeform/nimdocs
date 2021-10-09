@@ -1,6 +1,6 @@
 <img src="docs/nimdocsBanner.png">
 
-# Nim docs - generate a doc for any github nim project.
+# Nim docs - generate a doc for any GitHub Nim project.
 
 `nimble install nimdocs`
 
