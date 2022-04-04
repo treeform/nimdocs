@@ -1,6 +1,14 @@
 <img src="docs/nimdocsBanner.png">
 
-# Nim docs - generate a doc for any github nim project.
+# Nim docs - generate a doc for any GitHub Nim project.
+
+`nimble install nimdocs`
+
+![Github Actions](https://github.com/treeform/nimdocs/workflows/Github%20Actions/badge.svg)
+
+[API reference](https://nimdocs.com/treeform/nimdocs)
+
+## About
 
 I got tried of building nim docs for all of my many projects. I create this site that auto generates the docs for me based on the url. Going to https://nimdocs.com/treeform/pixie will just clone the https://github.com/treeform/pixie and generate the docs with index for all files.
 

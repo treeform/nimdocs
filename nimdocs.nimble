@@ -1,5 +1,5 @@
 version     = "0.0.1"
-author      = "treeform"
+author      = "Andre von Houck"
 description = "Nimdocs.com - automatically generat docs for nim projects."
 license     = "MIT"
 

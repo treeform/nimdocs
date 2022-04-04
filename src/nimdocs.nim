@@ -162,9 +162,8 @@ proc cb(req: Request) {.async.} =
     }))
 
 when isMainModule:
-  while true:
-    try:
-      waitFor server.serve(Port(80), cb)
-    except:
-      echo getCurrentExceptionMsg()
-    sleep(10)
+  try:
+    waitFor server.serve(Port(80), cb)
+  except:
+    echo getCurrentExceptionMsg()
+  sleep(10)
