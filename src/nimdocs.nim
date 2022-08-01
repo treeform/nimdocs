@@ -23,7 +23,7 @@ var
   gitCloneTime: float64
   gitCloneRateLimit = 5.0 # seconds
 const
-  allowedAuthorsList = @["treeform", "guzba", "nim-lang", "beef331"]
+  allowedAuthorsList = @["treeform", "guzba", "nim-lang", "beef331", "status-im"]
 
 var server = newAsyncHttpServer()
 proc cb(req: Request) {.async.} =
