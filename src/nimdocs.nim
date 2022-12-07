@@ -14,8 +14,7 @@
 ## * Add source links back to github.com.
 ## * Generates docs for all files in the repo.
 
-import asyncdispatch, asynchttpserver, mimetypes, os, osproc, print, strformat,
-    strtabs, strutils, times
+import mimetypes, os, osproc, strformat, strtabs, strutils, times, mummy
 
 var
   gitPullTime: float64
@@ -25,29 +24,28 @@ var
 const
   allowedAuthorsList = @["treeform", "guzba", "nim-lang", "beef331"]
 
-var server = newAsyncHttpServer()
-proc cb(req: Request) {.async.} =
+proc handler(request: Request) {.gcsafe.} =
 
   # Handle static files.
-  if req.url.path == "/":
+  if request.uri == "/":
     let html = &"""<meta http-equiv="refresh" content="0; url=/treeform/nimdocs/nimdocs.html" />"""
-    await req.respond(Http200, html, newHttpHeaders({
-      "Content-Type": "text/html"
-    }))
-    return
-  if req.url.path == "/favicon.ico":
-    await req.respond(Http200, "TODO: icon", newHttpHeaders())
+    var headers: HttpHeaders
+    headers["Content-Type"] = "text/html"
+    request.respond(200, headers, html)
     return
 
   # Handle github urls.
   let
-    parts = req.url.path.strip(chars = {'/'}).split('/')
+    parts = request.uri.strip(chars = {'/'}).split('/')
 
   if parts.len < 2:
-    await req.respond(
-      Http404,
+    var headers: HttpHeaders
+    headers["Content-Type"] = "text/html"
+    request.respond(
+      404,
+      headers,
       "<h1>404: not found. /user/repo Required.</h1>",
-      newHttpHeaders())
+    )
     return
 
   let
@@ -57,22 +55,24 @@ proc cb(req: Request) {.async.} =
 
   # Only allow registered authors.
   if author notin allowedAuthorsList:
-    await req.respond(
-      Http404,
-      &"<h1>404: https://github.com/{author}/* not allowed</h1>",
-      newHttpHeaders({
-        "Content-Type": "text/html"
-      })
+    var headers: HttpHeaders
+    headers["Content-Type"] = "text/html"
+    request.respond(
+      404,
+      headers,
+      &"<h1>404: https://github.com/{author}/* not allowed</h1>"
     )
     return
 
   var needsDocs = false
   var output = ""
 
-  proc showLog() {.async.} =
-    print 500
+  proc showLog() =
+    echo 500
     echo output
-    await req.respond(Http500, output, newHttpHeaders())
+    var headers: HttpHeaders
+    headers["Content-Type"] = "text/plain"
+    request.respond(500, headers, output)
 
   discard existsOrCreateDir("repos" / author)
 
@@ -80,12 +80,12 @@ proc cb(req: Request) {.async.} =
     if gitPullTime + gitPullRateLimit < epochTime():
       gitPullTime = epochTime()
       let gitUpdate = &"git pull"
-      print gitUpdate
+      echo gitUpdate
       let res = execCmdEx(gitUpdate, workingDir = "repos" / author / repo)
       output.add res[0]
-      print res
+      echo res
       if res[1] != 0:
-        await showLog()
+        showLog()
         return
       if "changed" in res[0]:
         needsDocs = true
@@ -96,7 +96,7 @@ proc cb(req: Request) {.async.} =
     if gitCloneTime + gitCloneRateLimit < epochTime():
       gitCloneTime = epochTime()
       let gitClone = &"git clone {gitUrl} repos/{author}/{repo}"
-      print gitClone
+      echo gitClone
       let res = execCmdEx(
         gitClone,
         env = {
@@ -105,65 +105,64 @@ proc cb(req: Request) {.async.} =
       )
       output.add res[0]
       if res[1] != 0:
-        await showLog()
+        showLog()
         return
       needsDocs = true
     else:
       output.add "Rate limiting git clone"
 
   if not dirExists("repos" / author / repo):
-    await showLog()
+    showLog()
     return
 
   if needsDocs:
     block:
       let nimbleDevelop = &"nimble develop -y"
-      print nimbleDevelop
+      echo nimbleDevelop
       let res = execCmdEx(nimbleDevelop, workingDir = "repos" / author / repo)
       if res[1] != 0:
         output.add res[0]
-        await showLog()
+        showLog()
         return
 
     block:
       let nimbeDoc = &"nim doc --index:on --project --out:docs --hints:off --git.url:{gitUrl} --git.commit:master src/{repo}.nim "
-      print nimbeDoc
+      echo nimbeDoc
       let res = execCmdEx(nimbeDoc, workingDir = "repos" / author / repo)
       if res[1] != 0:
         output.add res[0]
-        await showLog()
+        showLog()
         return
 
   var filePath = ""
-  print parts.len, parts
+  echo parts.len, " ", parts
   if parts.len > 2:
     filePath = join(parts[2..^1], "/")
   else:
     let html = &"""<meta http-equiv="refresh" content="0; url=/{author}/{repo}/{repo}.html" />"""
-    await req.respond(Http200, html, newHttpHeaders({
-      "Content-Type": "text/html"
-    }))
+    var headers: HttpHeaders
+    headers["Content-Type"] = "text/html"
+    request.respond(200, headers, html)
     return
 
   filePath = "repos" / author / repo / "docs" / filePath
 
-  print filePath
+  echo filePath
 
   var m = newMimetypes()
 
   if fileExists(filePath):
     let data = readFile(filePath)
-    await req.respond(Http200, data, newHttpHeaders({
-      "Content-Type": m.getMimetype(filePath.splitFile.ext)
-    }))
+    var headers: HttpHeaders
+    headers["Content-Type"] = m.getMimetype(filePath.splitFile.ext)
+    request.respond(200, headers, data)
   else:
-    await req.respond(Http404, "<h1>404: not found</h1>", newHttpHeaders({
-      "Content-Type": "text/html"
-    }))
+    var headers: HttpHeaders
+    headers["Content-Type"] = "text/html"
+    request.respond(404, headers, "<h1>404: not found</h1>")
 
 when isMainModule:
-  try:
-    waitFor server.serve(Port(80), cb)
-  except:
-    echo getCurrentExceptionMsg()
+  var server = newServer(handler)
+  createDir("repos")
+  server.serve(Port(1180))
   sleep(10)
