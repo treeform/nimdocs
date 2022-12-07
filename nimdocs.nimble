@@ -1,6 +1,6 @@
 version     = "0.0.1"
 author      = "Andre von Houck"
-description = "Nimdocs.com - automatically generat docs for nim projects."
+description = "NimDocs.com - automatically generate docs for Nim projects."
 license     = "MIT"
 
 srcDir = "src"
