@@ -19,15 +19,20 @@
 
 import mimetypes, os, osproc, strformat, strtabs, strutils, times, mummy
 
+const allowedAuthorsList = @[
+  "treeform",
+  "guzba",
+  "nim-lang",
+  "beef331"
+]
+
 var
   gitPullTime: float64
   gitPullRateLimit = 60.0 # seconds
   gitCloneTime: float64
   gitCloneRateLimit = 5.0 # seconds
-const
-  allowedAuthorsList = @["treeform", "guzba", "nim-lang", "beef331"]
 
-proc handler(request: Request) {.gcsafe.} =
+proc handler(request: Request) =
 
   # Handle static files.
   if request.uri == "/":
@@ -164,8 +169,8 @@ proc handler(request: Request) {.gcsafe.} =
     headers["Content-Type"] = "text/html"
     request.respond(404, headers, "<h1>404: not found</h1>")
 
-when isMainModule:
-  var server = newServer(handler)
-  createDir("repos")
-  server.serve(Port(1180))
-  sleep(10)
+# Make sure the repos directory exists
+createDir("repos")
+
+let server = newServer(handler)
+server.serve(Port(1180))
