@@ -42,6 +42,11 @@ proc indexHandler(request: Request) =
   headers["Location"] = "/treeform/nimdocs/nimdocs.html"
   request.respond(302, headers)
 
+proc notFoundHandler(request: Request) =
+  var headers: HttpHeaders
+  headers["Content-Type"] = "text/html"
+  request.respond(404, headers, "<h1>Not Found</h1>")
+
 proc repoHandler(request: Request) =
   let
     url = parseUrl(request.uri)
@@ -93,6 +98,11 @@ proc repoHandler(request: Request) =
       workingDir = repoDir
     )
 
+  for path in url.paths:
+    if ".." in path:
+      notFoundHandler(request)
+      return
+
   let filePath = repoDir / "docs" / join(url.paths[2 .. ^1], "/")
   if fileExists(filePath):
     var headers: HttpHeaders
@@ -100,13 +110,12 @@ proc repoHandler(request: Request) =
       headers["Content-Type"] = mimeDb.getMimetype(filePath.splitFile.ext)
     request.respond(200, headers, readFile(filePath))
   else:
-    var headers: HttpHeaders
-    headers["Content-Type"] = "text/html"
-    request.respond(404, headers, "<h1>Not Found</h1>")
+    notFoundHandler(request)
 
 var router: Router
 router.get("/", indexHandler)
 router.get("/*/**", repoHandler)
+router.notFoundHandler = notFoundHandler
 
 when isMainModule:
   # Make sure the repos directory exists
