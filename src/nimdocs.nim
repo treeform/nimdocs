@@ -17,8 +17,8 @@
 ## * Add source links back to github.com.
 ## * Generates docs for all files in the repo.
 
-import mummy, mummy/routers, std/os, urlly, std/strformat,
-    nimdocs/internal, std/locks, std/strutils, std/tables, std/times, std/mimetypes
+import mummy, mummy/routers, nimdocs/internal, std/locks, std/mimetypes, std/os,
+    std/strformat, std/strutils, std/tables, std/times, urlly
 
 const
   reposDir = "repos"
@@ -88,7 +88,10 @@ proc repoHandler(request: Request) =
 
   if changed:
     discard runNimCmd("nimble develop -y", workingDir = repoDir)
-    discard runNimCmd(&"nim doc --index:on --project --out:docs --hints:off --git.url:{githubUrl} src/{repo}.nim", workingDir = repoDir)
+    discard runNimCmd(
+      &"nim doc --index:on --project --out:docs --hints:off --git.url:{githubUrl} src/{repo}.nim",
+      workingDir = repoDir
+    )
 
   let filePath = repoDir / "docs" / join(url.paths[2 .. ^1], "/")
   if fileExists(filePath):
