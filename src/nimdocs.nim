@@ -108,8 +108,9 @@ var router: Router
 router.get("/", indexHandler)
 router.get("/*/**", repoHandler)
 
-# Make sure the repos directory exists
-createDir(reposDir)
+when isMainModule:
+  # Make sure the repos directory exists
+  createDir(reposDir)
 
-let server = newServer(router)
-server.serve(Port(1180))
+  let server = newServer(router)
+  server.serve(Port(1180))
