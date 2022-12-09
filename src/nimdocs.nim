@@ -17,160 +17,96 @@
 ## * Add source links back to github.com.
 ## * Generates docs for all files in the repo.
 
-import mimetypes, os, osproc, strformat, strtabs, strutils, times, mummy
+import mummy, mummy/routers, std/os, urlly, std/strformat,
+    nimdocs/internal, std/locks, std/strutils, std/tables, std/times, std/mimetypes
 
-const allowedAuthorsList = @[
-  "treeform",
-  "guzba",
-  "nim-lang",
-  "beef331"
-]
+const
+  reposDir = "repos"
+  repoPullRateLimit = 60.0 # Seconds
+  allowedAuthorsList = @[
+    "treeform",
+    "guzba",
+    "nim-lang",
+    "beef331"
+  ]
 
 var
-  gitPullTime: float64
-  gitPullRateLimit = 60.0 # seconds
-  gitCloneTime: float64
-  gitCloneRateLimit = 5.0 # seconds
+  lastPulledLock: Lock
+  lastPulled: Table[string, float64]
+  mimeDb = newMimetypes()
 
-proc handler(request: Request) =
+initLock(lastPulledLock)
 
-  # Handle static files.
-  if request.uri == "/":
-    let html = &"""<meta http-equiv="refresh" content="0; url=/treeform/nimdocs/nimdocs.html" />"""
-    var headers: HttpHeaders
-    headers["Content-Type"] = "text/html"
-    request.respond(200, headers, html)
-    return
+proc indexHandler(request: Request) =
+  var headers: HttpHeaders
+  headers["Location"] = "/treeform/nimdocs/nimdocs.html"
+  request.respond(302, headers)
 
-  # Handle github urls.
+proc repoHandler(request: Request) =
   let
-    parts = request.uri.strip(chars = {'/'}).split('/')
+    url = parseUrl(request.uri)
+    author = url.paths[0]
+    repo = url.paths[1]
+    githubUrl = &"https://github.com/{author}/{repo}"
 
-  if parts.len < 2:
-    var headers: HttpHeaders
-    headers["Content-Type"] = "text/html"
-    request.respond(
-      404,
-      headers,
-      "<h1>404: not found. /user/repo Required.</h1>",
-    )
-    return
-
-  let
-    author = parts[0]
-    repo = parts[1]
-    gitUrl = &"https://github.com/{author}/{repo}"
-
-  # Only allow registered authors.
+  # Only allowed authors.
   if author notin allowedAuthorsList:
     var headers: HttpHeaders
     headers["Content-Type"] = "text/html"
-    request.respond(
-      404,
-      headers,
-      &"<h1>404: https://github.com/{author}/* not allowed</h1>"
-    )
+    request.respond(404, headers, &"<h1>404 Not Found</h1>")
     return
 
-  var needsDocs = false
-  var output = ""
-
-  proc showLog() =
-    echo 500
-    echo output
+  if url.paths.len == 2:
     var headers: HttpHeaders
-    headers["Content-Type"] = "text/plain"
-    request.respond(500, headers, output)
-
-  discard existsOrCreateDir("repos" / author)
-
-  if dirExists("repos" / author / repo):
-    if gitPullTime + gitPullRateLimit < epochTime():
-      gitPullTime = epochTime()
-      let gitUpdate = &"git pull"
-      echo gitUpdate
-      let res = execCmdEx(gitUpdate, workingDir = "repos" / author / repo)
-      output.add res[0]
-      echo res
-      if res[1] != 0:
-        showLog()
-        return
-      if "changed" in res[0]:
-        needsDocs = true
-    else:
-      output.add "Rate limiting git pull"
-
-  else:
-    if gitCloneTime + gitCloneRateLimit < epochTime():
-      gitCloneTime = epochTime()
-      let gitClone = &"git clone {gitUrl} repos/{author}/{repo}"
-      echo gitClone
-      let res = execCmdEx(
-        gitClone,
-        env = {
-          "GIT_TERMINAL_PROMPT": "0"
-        }.newStringTable
-      )
-      output.add res[0]
-      if res[1] != 0:
-        showLog()
-        return
-      needsDocs = true
-    else:
-      output.add "Rate limiting git clone"
-
-  if not dirExists("repos" / author / repo):
-    showLog()
+    headers["Location"] = &"/{author}/{repo}/{repo}.html"
+    request.respond(302, headers)
     return
 
-  if needsDocs:
-    block:
-      let nimbleDevelop = &"nimble develop -y"
-      echo nimbleDevelop
-      let res = execCmdEx(nimbleDevelop, workingDir = "repos" / author / repo)
-      if res[1] != 0:
-        output.add res[0]
-        showLog()
-        return
+  let repoDir = reposDir / author / repo
 
-    block:
-      let nimbeDoc = &"nim doc --index:on --project --out:docs --hints:off --git.url:{gitUrl} --git.commit:master src/{repo}.nim "
-      echo nimbeDoc
-      let res = execCmdEx(nimbeDoc, workingDir = "repos" / author / repo)
-      if res[1] != 0:
-        output.add res[0]
-        showLog()
-        return
+  var needsPull, changed: bool
 
-  var filePath = ""
-  echo parts.len, " ", parts
-  if parts.len > 2:
-    filePath = join(parts[2..^1], "/")
-  else:
-    let html = &"""<meta http-equiv="refresh" content="0; url=/{author}/{repo}/{repo}.html" />"""
-    var headers: HttpHeaders
-    headers["Content-Type"] = "text/html"
-    request.respond(200, headers, html)
-    return
+  {.gcsafe.}:
+    withLock lastPulledLock:
+      let lastPullDelta = epochTime() - lastPulled.getOrDefault(repoDir, 0)
+      if lastPullDelta > repoPullRateLimit:
+        needsPull = true
+        lastPulled[repoDir] = epochTime()
 
-  filePath = "repos" / author / repo / "docs" / filePath
+  if needsPull:
+    if dirExists(repoDir):
+      # Run in this order to handle force-pushes
+      let hash1 = runGitCmd("git rev-parse HEAD", workingDir = repoDir)
+      discard runGitCmd("git fetch", workingDir = repoDir)
+      discard runGitCmd("git reset --hard origin", workingDir = repoDir)
+      let hash2 = runGitCmd("git rev-parse HEAD", workingDir = repoDir)
+      if hash1 != hash2:
+        changed = true
+    else:
+      discard runGitCmd(&"git clone --depth 1 {githubUrl} {repoDir}")
+      changed = true
 
-  echo filePath
+  if changed:
+    discard runNimCmd("nimble develop -y", workingDir = repoDir)
+    discard runNimCmd(&"nim doc --index:on --project --out:docs --hints:off --git.url:{githubUrl} src/{repo}.nim", workingDir = repoDir)
 
-  var m = newMimetypes()
-
+  let filePath = repoDir / "docs" / join(url.paths[2 .. ^1], "/")
   if fileExists(filePath):
-    let data = readFile(filePath)
     var headers: HttpHeaders
-    headers["Content-Type"] = m.getMimetype(filePath.splitFile.ext)
-    request.respond(200, headers, data)
+    {.gcsafe.}:
+      headers["Content-Type"] = mimeDb.getMimetype(filePath.splitFile.ext)
+    request.respond(200, headers, readFile(filePath))
   else:
     var headers: HttpHeaders
     headers["Content-Type"] = "text/html"
-    request.respond(404, headers, "<h1>404: not found</h1>")
+    request.respond(404, headers, "<h1>Not Found</h1>")
+
+var router: Router
+router.get("/", indexHandler)
+router.get("/*/**", repoHandler)
 
 # Make sure the repos directory exists
-createDir("repos")
+createDir(reposDir)
 
-let server = newServer(handler)
+let server = newServer(router)
 server.serve(Port(1180))

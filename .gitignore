@@ -9,5 +9,6 @@ nimcache
 *.pdb
 *.ilk
 .*
+*.out
 
 repos/*
