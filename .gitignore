@@ -12,3 +12,5 @@ nimcache
 *.out
 
 repos/*
+nimbles/*
+logs.txt

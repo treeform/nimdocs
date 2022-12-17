@@ -22,6 +22,7 @@ import mummy, mummy/routers, nimdocs/internal, std/locks, std/mimetypes, std/os,
 
 const
   reposDir = "repos"
+  nimblesDir = "nimbles"
   repoPullRateLimit = 60.0 # Seconds
   allowedAuthorsList = @[
     "treeform",
@@ -31,11 +32,12 @@ const
   ]
 
 var
-  lastPulledLock: Lock
+  lastPulledLock, nimbleLock: Lock
   lastPulled: Table[string, float64]
   mimeDb = newMimetypes()
 
 initLock(lastPulledLock)
+initLock(nimbleLock)
 
 proc indexHandler(request: Request) =
   var headers: HttpHeaders
@@ -61,13 +63,15 @@ proc repoHandler(request: Request) =
     request.respond(404, headers, &"<h1>404 Not Found</h1>")
     return
 
-  if url.paths.len == 2:
+  if url.paths.len == 2 or (url.paths.len == 3 and url.paths[2] == ""):
     var headers: HttpHeaders
     headers["Location"] = &"/{author}/{repo}/{repo}.html"
     request.respond(302, headers)
     return
 
-  let repoDir = reposDir / author / repo
+  let
+    repoDir = reposDir / author / repo
+    nimbleDir = getCurrentDir() / nimblesDir / author / repo
 
   var needsPull, changed: bool
 
@@ -92,9 +96,20 @@ proc repoHandler(request: Request) =
       changed = true
 
   if changed:
-    discard runNimCmd("nimble develop -y", workingDir = repoDir)
+    withLock nimbleLock:
+      try:
+        createDir(getHomeDir() / ".config" / "nimble")
+        writeFile(getHomeDir() / ".config/nimble/nimble.ini", &"nimbleDir = r\"{nimbleDir}\"\n")
+        discard runNimCmd("nimble develop -y", workingDir = repoDir)
+      finally:
+        removeFile(getHomeDir() / ".config/nimble/nimble.ini")
+
+    let branch =
+      runGitCmd("git rev-parse --abbrev-ref HEAD", workingDir = repoDir).strip()
     discard runNimCmd(
-      &"nim doc --index:on --project --out:docs --hints:off --git.url:{githubUrl} src/{repo}.nim",
+      &"nim doc --clearNimblePath --NimblePath:\"{nimbleDir}/pkgs\" " &
+      "--project --out:docs --hints:off " &
+      &"--git.url:{githubUrl} --git.commit:{branch} src/{repo}.nim",
       workingDir = repoDir
     )
 
@@ -120,6 +135,7 @@ router.notFoundHandler = notFoundHandler
 when isMainModule:
   # Make sure the repos directory exists
   createDir(reposDir)
+  createDir(nimblesDir)
 
   let server = newServer(router)
   server.serve(Port(1180))
