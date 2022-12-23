@@ -138,4 +138,4 @@ when isMainModule:
   createDir(nimblesDir)
 
   let server = newServer(router)
-  server.serve(Port(1180))
+  server.serve(Port(1180), "0.0.0.0")
