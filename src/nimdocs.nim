@@ -18,7 +18,7 @@
 ## * Generates docs for all files in the repo.
 
 import mummy, mummy/routers, nimdocs/internal, std/locks, std/mimetypes, std/os,
-    std/strformat, std/strutils, std/tables, std/times, urlly
+    std/strformat, std/strutils, std/tables, std/times, webby
 
 const
   reposDir = "repos"
