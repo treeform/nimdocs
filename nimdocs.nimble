@@ -1,9 +1,10 @@
-version     = "0.0.1"
+version     = "0.0.2"
 author      = "Andre von Houck"
-description = "Nimdocs.com - automatically generat docs for nim projects."
+description = "NimDocs.com - automatically generate docs for Nim projects."
 license     = "MIT"
 
 srcDir = "src"
 
 requires "nim >= 1.2.2"
-requires "print >= 1.0.0"
+requires "mummy >= 0.2.0"
+requires "urlly >= 1.1.0"

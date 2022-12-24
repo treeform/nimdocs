@@ -1,169 +1,157 @@
 ## .. image:: https://raw.githubusercontent.com/treeform/nimdocs/master/docs/nimdocsBanner.png
 ##
-## # Nim docs - generate a doc for any github nim project.
+## Nim Docs - generate docs for any GitHub Nim project.
 ##
-## I got tried of building nim docs for all of my many projects. I create this site that auto generates the docs for me based on the url. Going to https://nimdocs.com/treeform/pixie will just clone the https://github.com/treeform/pixie and generate the docs with index for all files.
+## I got tried of building Nim docs for all of my many projects.
+## I created this site that auto generates the docs for me based on the URL.
+## Going to https://nimdocs.com/treeform/pixie will just clone the
+## https://github.com/treeform/pixie repo and generate the docs.
 ##
-## It is alpha quality, so if you want to be included in the allowed authors list, open a pull request.
+## If you want to be included in the allowed authors list, open a pull request.
 ##
 ## Features:
 ## ---------
 ##
-## * Check if the docs are up to date with git.
-## * Clone new repositories if one just goes to them.
+## * Check if the docs are up to date with GitHub.
+## * Clone new repositories automatically.
 ## * Add source links back to github.com.
 ## * Generates docs for all files in the repo.
 
-import asyncdispatch, asynchttpserver, mimetypes, os, osproc, print, strformat,
-    strtabs, strutils, times
+import mummy, mummy/routers, nimdocs/internal, std/locks, std/mimetypes, std/os,
+    std/strformat, std/strutils, std/tables, std/times, webby, std/parseopt
+
+const
+  reposDir = "repos"
+  nimblesDir = "nimbles"
+  repoPullRateLimit = 60.0 # Seconds
+  allowedAuthorsList = @[
+    "treeform",
+    "guzba",
+    "nim-lang",
+    "beef331"
+  ]
 
 var
-  gitPullTime: float64
-  gitPullRateLimit = 60.0 # seconds
-  gitCloneTime: float64
-  gitCloneRateLimit = 5.0 # seconds
-const
-  allowedAuthorsList = @["treeform", "guzba", "nim-lang", "beef331"]
+  lastPulledLock, nimbleLock: Lock
+  lastPulled: Table[string, float64]
+  mimeDb = newMimetypes()
 
-var server = newAsyncHttpServer()
-proc cb(req: Request) {.async.} =
+initLock(lastPulledLock)
+initLock(nimbleLock)
 
-  # Handle static files.
-  if req.url.path == "/":
-    let html = &"""<meta http-equiv="refresh" content="0; url=/treeform/nimdocs/nimdocs.html" />"""
-    await req.respond(Http200, html, newHttpHeaders({
-      "Content-Type": "text/html"
-    }))
-    return
-  if req.url.path == "/favicon.ico":
-    await req.respond(Http200, "TODO: icon", newHttpHeaders())
-    return
+proc indexHandler(request: Request) =
+  var headers: HttpHeaders
+  headers["Location"] = "/treeform/nimdocs/nimdocs.html"
+  request.respond(302, headers)
 
-  # Handle github urls.
-  let
-    parts = req.url.path.strip(chars = {'/'}).split('/')
+proc notFoundHandler(request: Request) =
+  var headers: HttpHeaders
+  headers["Content-Type"] = "text/html"
+  request.respond(404, headers, "<h1>Not Found</h1>")
 
-  if parts.len < 2:
-    await req.respond(
-      Http404,
-      "<h1>404: not found. /user/repo Required.</h1>",
-      newHttpHeaders())
-    return
+proc repoHandler(request: Request) =
+  echo request.httpMethod, " ", request.uri
 
   let
-    author = parts[0]
-    repo = parts[1]
-    gitUrl = &"https://github.com/{author}/{repo}"
+    url = parseUrl(request.uri)
+    author = url.paths[0]
+    repo = url.paths[1]
+    githubUrl = &"https://github.com/{author}/{repo}"
 
-  # Only allow registered authors.
+  # Only allowed authors.
   if author notin allowedAuthorsList:
-    await req.respond(
-      Http404,
-      &"<h1>404: https://github.com/{author}/* not allowed</h1>",
-      newHttpHeaders({
-        "Content-Type": "text/html"
-      })
+    var headers: HttpHeaders
+    headers["Content-Type"] = "text/html"
+    request.respond(404, headers, &"<h1>404 Not Found</h1>")
+    return
+
+  if url.paths.len == 2 or (url.paths.len == 3 and url.paths[2] == ""):
+    var headers: HttpHeaders
+    headers["Location"] = &"/{author}/{repo}/{repo}.html"
+    request.respond(302, headers)
+    return
+
+  let
+    repoDir = reposDir / author / repo
+    nimbleDir = getCurrentDir() / nimblesDir / author / repo
+
+  var needsPull, changed: bool
+
+  {.gcsafe.}:
+    withLock lastPulledLock:
+      let lastPullDelta = epochTime() - lastPulled.getOrDefault(repoDir, 0)
+      if lastPullDelta > repoPullRateLimit:
+        needsPull = true
+        lastPulled[repoDir] = epochTime()
+
+  if needsPull:
+    if dirExists(repoDir):
+      # Run in this order to handle force-pushes
+      let hash1 = runGitCmd("git rev-parse HEAD", workingDir = repoDir)
+      discard runGitCmd("git fetch", workingDir = repoDir)
+      discard runGitCmd("git reset --hard origin", workingDir = repoDir)
+      let hash2 = runGitCmd("git rev-parse HEAD", workingDir = repoDir)
+      if hash1 != hash2:
+        changed = true
+    else:
+      discard runGitCmd(&"git clone --depth 1 {githubUrl} {repoDir}")
+      changed = true
+
+  if changed:
+    withLock nimbleLock:
+      try:
+        createDir(getHomeDir() / ".config" / "nimble")
+        writeFile(getHomeDir() / ".config/nimble/nimble.ini", &"nimbleDir = r\"{nimbleDir}\"\n")
+        discard runNimCmd("nimble develop -y", workingDir = repoDir)
+      finally:
+        removeFile(getHomeDir() / ".config/nimble/nimble.ini")
+
+    let branch =
+      runGitCmd("git rev-parse --abbrev-ref HEAD", workingDir = repoDir).strip()
+    discard runNimCmd(
+      &"nim doc --clearNimblePath --NimblePath:\"{nimbleDir}/pkgs\" " &
+      "--project --out:docs --hints:off " &
+      &"--git.url:{githubUrl} --git.commit:{branch} src/{repo}.nim",
+      workingDir = repoDir
     )
-    return
 
-  var needsDocs = false
-  var output = ""
+  for path in url.paths:
+    if ".." in path:
+      notFoundHandler(request)
+      return
 
-  proc showLog() {.async.} =
-    print 500
-    echo output
-    await req.respond(Http500, output, newHttpHeaders())
-
-  discard existsOrCreateDir("repos" / author)
-
-  if dirExists("repos" / author / repo):
-    if gitPullTime + gitPullRateLimit < epochTime():
-      gitPullTime = epochTime()
-      let gitUpdate = &"git pull"
-      print gitUpdate
-      let res = execCmdEx(gitUpdate, workingDir = "repos" / author / repo)
-      output.add res[0]
-      print res
-      if res[1] != 0:
-        await showLog()
-        return
-      if "changed" in res[0]:
-        needsDocs = true
-    else:
-      output.add "Rate limiting git pull"
-
-  else:
-    if gitCloneTime + gitCloneRateLimit < epochTime():
-      gitCloneTime = epochTime()
-      let gitClone = &"git clone {gitUrl} repos/{author}/{repo}"
-      print gitClone
-      let res = execCmdEx(
-        gitClone,
-        env = {
-          "GIT_TERMINAL_PROMPT": "0"
-        }.newStringTable
-      )
-      output.add res[0]
-      if res[1] != 0:
-        await showLog()
-        return
-      needsDocs = true
-    else:
-      output.add "Rate limiting git clone"
-
-  if not dirExists("repos" / author / repo):
-    await showLog()
-    return
-
-  if needsDocs:
-    block:
-      let nimbleDevelop = &"nimble develop -y"
-      print nimbleDevelop
-      let res = execCmdEx(nimbleDevelop, workingDir = "repos" / author / repo)
-      if res[1] != 0:
-        output.add res[0]
-        await showLog()
-        return
-
-    block:
-      let nimbeDoc = &"nim doc --index:on --project --out:docs --hints:off --git.url:{gitUrl} --git.commit:master src/{repo}.nim "
-      print nimbeDoc
-      let res = execCmdEx(nimbeDoc, workingDir = "repos" / author / repo)
-      if res[1] != 0:
-        output.add res[0]
-        await showLog()
-        return
-
-  var filePath = ""
-  print parts.len, parts
-  if parts.len > 2:
-    filePath = join(parts[2..^1], "/")
-  else:
-    let html = &"""<meta http-equiv="refresh" content="0; url=/{author}/{repo}/{repo}.html" />"""
-    await req.respond(Http200, html, newHttpHeaders({
-      "Content-Type": "text/html"
-    }))
-    return
-
-  filePath = "repos" / author / repo / "docs" / filePath
-
-  print filePath
-
-  var m = newMimetypes()
-
+  let filePath = repoDir / "docs" / join(url.paths[2 .. ^1], "/")
   if fileExists(filePath):
-    let data = readFile(filePath)
-    await req.respond(Http200, data, newHttpHeaders({
-      "Content-Type": m.getMimetype(filePath.splitFile.ext)
-    }))
+    var headers: HttpHeaders
+    {.gcsafe.}:
+      headers["Content-Type"] = mimeDb.getMimetype(filePath.splitFile.ext)
+    request.respond(200, headers, readFile(filePath))
   else:
-    await req.respond(Http404, "<h1>404: not found</h1>", newHttpHeaders({
-      "Content-Type": "text/html"
-    }))
+    notFoundHandler(request)
+
+var router: Router
+router.get("/", indexHandler)
+router.get("/*/**", repoHandler)
+router.notFoundHandler = notFoundHandler
 
 when isMainModule:
-  try:
-    waitFor server.serve(Port(80), cb)
-  except:
-    echo getCurrentExceptionMsg()
-  sleep(10)
+  var
+    opt = initOptParser(quoteShellCommand(commandLineParams()))
+    port = 1180
+  while true:
+    opt.next()
+    case opt.kind:
+    of cmdEnd: break
+    of cmdShortOption, cmdLongOption:
+      if opt.key == "port":
+        port = parseInt(opt.val)
+    of cmdArgument:
+      discard
+
+  # Make sure the repos directory exists
+  createDir(reposDir)
+  createDir(nimblesDir)
+
+  let server = newServer(router)
+  echo "Serving on ", port
+  server.serve(Port(port), "0.0.0.0")
