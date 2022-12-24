@@ -50,6 +50,8 @@ proc notFoundHandler(request: Request) =
   request.respond(404, headers, "<h1>Not Found</h1>")
 
 proc repoHandler(request: Request) =
+  echo request.httpMethod, " ", request.uri
+
   let
     url = parseUrl(request.uri)
     author = url.paths[0]
