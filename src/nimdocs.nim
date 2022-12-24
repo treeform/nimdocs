@@ -18,7 +18,7 @@
 ## * Generates docs for all files in the repo.
 
 import mummy, mummy/routers, nimdocs/internal, std/locks, std/mimetypes, std/os,
-    std/strformat, std/strutils, std/tables, std/times, webby
+    std/strformat, std/strutils, std/tables, std/times, webby, std/parseopt
 
 const
   reposDir = "repos"
@@ -133,9 +133,23 @@ router.get("/*/**", repoHandler)
 router.notFoundHandler = notFoundHandler
 
 when isMainModule:
+  var
+    opt = initOptParser(quoteShellCommand(commandLineParams()))
+    port = 1180
+  while true:
+    opt.next()
+    case opt.kind:
+    of cmdEnd: break
+    of cmdShortOption, cmdLongOption:
+      if opt.key == "port":
+        port = parseInt(opt.val)
+    of cmdArgument:
+      discard
+
   # Make sure the repos directory exists
   createDir(reposDir)
   createDir(nimblesDir)
 
   let server = newServer(router)
-  server.serve(Port(1180), "0.0.0.0")
+  echo "Serving on ", port
+  server.serve(Port(port), "0.0.0.0")
