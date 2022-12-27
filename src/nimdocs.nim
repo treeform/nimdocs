@@ -108,12 +108,16 @@ proc repoHandler(request: Request) =
 
     let branch =
       runGitCmd("git rev-parse --abbrev-ref HEAD", workingDir = repoDir).strip()
-    discard runNimCmd(
-      &"nim doc --clearNimblePath --NimblePath:\"{nimbleDir}/pkgs\" " &
-      "--project --out:docs --hints:off " &
-      &"--git.url:{githubUrl} --git.commit:{branch} src/{repo}.nim",
-      workingDir = repoDir
-    )
+    try:
+      discard runNimCmd(
+        &"nim doc --clearNimblePath --NimblePath:\"{nimbleDir}/pkgs\" " &
+        "--project --out:docs --hints:off " &
+        &"--git.url:{githubUrl} --git.commit:{branch} src/{repo}.nim",
+        workingDir = repoDir
+      )
+    except:
+      removeDir(repoDir)
+      raise getCurrentException()
 
   for path in url.paths:
     if ".." in path:
