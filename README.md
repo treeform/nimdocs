@@ -10,7 +10,7 @@
 
 ## About
 
-I got tried of building Nim docs for all of my many projects. I created this site that auto generates the docs for me based on the URL. Going to https://nimdocs.com/treeform/pixie will just clone the https://github.com/treeform/pixie repo and generate the docs.
+I got tired of building Nim docs for all of my many projects. I created this site that auto generates the docs for me based on the URL. Going to https://nimdocs.com/treeform/pixie will just clone the https://github.com/treeform/pixie repo and generate the docs.
 
 If you want to be included in the allowed authors list, open a pull request.
 
