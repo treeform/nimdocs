@@ -18,7 +18,7 @@
 ## * Generates docs for all files in the repo.
 
 import mummy, mummy/routers, nimdocs/internal, std/locks, std/mimetypes, std/os,
-    std/strformat, std/strutils, std/tables, std/times, webby, std/parseopt
+    std/strformat, std/strutils, std/tables, std/times, webby, bossy
 
 const
   reposDir = "repos"
@@ -108,12 +108,16 @@ proc repoHandler(request: Request) =
 
     let branch =
       runGitCmd("git rev-parse --abbrev-ref HEAD", workingDir = repoDir).strip()
-    discard runNimCmd(
-      &"nim doc --clearNimblePath --NimblePath:\"{nimbleDir}/pkgs\" " &
-      "--project --out:docs --hints:off " &
-      &"--git.url:{githubUrl} --git.commit:{branch} src/{repo}.nim",
-      workingDir = repoDir
-    )
+    try:
+      discard runNimCmd(
+        &"nim doc --clearNimblePath --NimblePath:\"{nimbleDir}/pkgs\" " &
+        "--project --out:docs --hints:off " &
+        &"--git.url:{githubUrl} --git.commit:{branch} src/{repo}.nim",
+        workingDir = repoDir
+      )
+    except:
+      removeDir(repoDir)
+      raise getCurrentException()
 
   for path in url.paths:
     if ".." in path:
@@ -135,18 +139,7 @@ router.get("/*/**", repoHandler)
 router.notFoundHandler = notFoundHandler
 
 when isMainModule:
-  var
-    opt = initOptParser(quoteShellCommand(commandLineParams()))
-    port = 1180
-  while true:
-    opt.next()
-    case opt.kind:
-    of cmdEnd: break
-    of cmdShortOption, cmdLongOption:
-      if opt.key == "port":
-        port = parseInt(opt.val)
-    of cmdArgument:
-      discard
+  let port = parseInt(getCommandLineArgs().getOrDefault("port", "1180"))
 
   # Make sure the repos directory exists
   createDir(reposDir)
