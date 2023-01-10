@@ -54,8 +54,8 @@ proc repoHandler(request: Request) =
 
   let
     url = parseUrl(request.uri)
-    author = url.paths[0]
-    repo = url.paths[1]
+    author = encodeURIComponent(url.paths[0])
+    repo = encodeURIComponent(url.paths[1])
     githubUrl = &"https://github.com/{author}/{repo}"
 
   # Only allowed authors.
