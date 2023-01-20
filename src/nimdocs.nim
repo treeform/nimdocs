@@ -28,7 +28,8 @@ const
     "treeform",
     "guzba",
     "nim-lang",
-    "beef331"
+    "beef331",
+    "geotre"
   ]
 
 var
