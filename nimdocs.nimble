@@ -6,5 +6,5 @@ license     = "MIT"
 srcDir = "src"
 
 requires "nim >= 1.6.10"
-requires "mummy >= 0.2.5"
+requires "mummy >= 0.2.15"
 requires "bossy >= 0.1.0"
